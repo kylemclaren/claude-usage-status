@@ -7,6 +7,10 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 // UsageBucket represents a usage time bucket (five_hour or seven_day)
@@ -64,33 +68,24 @@ func fetchUsage(token string) (*UsageResponse, error) {
 	return fetchUsageFromURL(usageAPIURL, token)
 }
 
-// ANSI color codes for gradient progress bar
-const (
-	reset   = "\033[0m"
-	green   = "\033[38;5;46m"  // bright green
-	lime    = "\033[38;5;118m" // lime
-	yellow  = "\033[38;5;226m" // yellow
-	orange  = "\033[38;5;208m" // orange
-	red     = "\033[38;5;196m" // red
-	dimGray = "\033[38;5;240m" // dim gray for empty bar
+// Color definitions
+var (
+	greenColor  = lipgloss.Color("#00ff00")
+	yellowColor = lipgloss.Color("#ffff00")
+	redColor    = lipgloss.Color("#ff0000")
 )
 
-// getGradientColor returns ANSI color based on position in bar (0.0-1.0)
-func getGradientColor(position float64) string {
-	if position < 0.5 {
-		return green
-	} else if position < 0.7 {
-		return lime
-	} else if position < 0.85 {
-		return yellow
-	} else if position < 0.95 {
-		return orange
-	}
-	return red
+// getGradientEndColor returns an end color that smoothly interpolates from green to red
+// based on the fill percentage, creating a "scaled gradient" effect
+func getGradientEndColor(pct float64) string {
+	t := pct / 100
+	r := int(255 * t)
+	g := int(255 * (1 - t))
+	return fmt.Sprintf("#%02x%02x00", r, g)
 }
 
-// renderProgressBar creates a gradient progress bar with ANSI colors
-func renderProgressBar(percent float64, width int) string {
+// createProgressBar creates a gradient progress bar with smooth color scaling
+func createProgressBar(percent float64, width int) string {
 	if percent > 100 {
 		percent = 100
 	}
@@ -98,38 +93,28 @@ func renderProgressBar(percent float64, width int) string {
 		percent = 0
 	}
 
-	filled := int(float64(width) * percent / 100)
-	empty := width - filled
+	endColor := getGradientEndColor(percent)
+	prog := progress.New(
+		progress.WithColorProfile(termenv.TrueColor),
+		progress.WithGradient("#00ff00", endColor),
+		progress.WithWidth(width),
+		progress.WithoutPercentage(),
+	)
 
-	var bar string
-
-	// Filled portion with gradient
-	for i := 0; i < filled; i++ {
-		position := float64(i) / float64(width)
-		color := getGradientColor(position)
-		bar += color + "█"
-	}
-
-	// Empty portion
-	if empty > 0 {
-		bar += dimGray
-		for i := 0; i < empty; i++ {
-			bar += "░"
-		}
-	}
-
-	bar += reset
-	return bar
+	return prog.ViewAs(percent / 100)
 }
 
-// getLabelColor returns color for the percentage label based on usage
-func getLabelColor(percent float64) string {
+// getLabelStyle returns a lipgloss style for the percentage label based on usage
+func getLabelStyle(percent float64) lipgloss.Style {
+	var color lipgloss.Color
 	if percent < 70 {
-		return green
+		color = greenColor
 	} else if percent < 90 {
-		return yellow
+		color = yellowColor
+	} else {
+		color = redColor
 	}
-	return red
+	return lipgloss.NewStyle().Foreground(color)
 }
 
 // formatDuration formats a duration into human-readable format like "2h15m"
@@ -167,17 +152,17 @@ func formatStatusLine(usage *UsageResponse, now time.Time) string {
 	fiveHourPct := usage.FiveHour.Utilization
 	sevenDayPct := usage.SevenDay.Utilization
 
-	fiveHourBar := renderProgressBar(fiveHourPct, 10)
-	sevenDayBar := renderProgressBar(sevenDayPct, 10)
+	fiveHourBar := createProgressBar(fiveHourPct, 10)
+	sevenDayBar := createProgressBar(sevenDayPct, 10)
 
-	fiveHourColor := getLabelColor(fiveHourPct)
-	sevenDayColor := getLabelColor(sevenDayPct)
+	fiveHourLabel := getLabelStyle(fiveHourPct).Render(fmt.Sprintf("%d%%", int(fiveHourPct)))
+	sevenDayLabel := getLabelStyle(sevenDayPct).Render(fmt.Sprintf("%d%%", int(sevenDayPct)))
 
 	fiveHourReset := formatTimeUntilReset(usage.FiveHour.ResetsAt, now)
 
-	return fmt.Sprintf("5h %s %s%d%%%s │ 7d %s %s%d%%%s │ ⏱ %s",
-		fiveHourBar, fiveHourColor, int(fiveHourPct), reset,
-		sevenDayBar, sevenDayColor, int(sevenDayPct), reset,
+	return fmt.Sprintf("5h %s %s │ 7d %s %s │ ⏱ %s",
+		fiveHourBar, fiveHourLabel,
+		sevenDayBar, sevenDayLabel,
 		fiveHourReset)
 }
 

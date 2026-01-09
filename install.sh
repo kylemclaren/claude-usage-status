@@ -109,24 +109,77 @@ configure_settings() {
     if [ -f "$SETTINGS_FILE" ]; then
         # Check if statusLine is already configured
         if grep -q '"statusLine"' "$SETTINGS_FILE"; then
-            warn "statusLine already configured in settings.json"
-            warn "Add manually if needed:"
-            echo '  "statusLine": {'
-            echo '    "type": "command",'
-            echo '    "command": "~/.claude/statusline.sh"'
-            echo '  }'
+            echo ""
+            warn "Existing statusLine found in settings.json"
+            echo ""
+            echo "What would you like to do?"
+            echo "  1) Replace - Use only usage status"
+            echo "  2) Append  - Add usage to your existing statusLine"
+            echo "  3) Skip    - Don't modify settings"
+            echo ""
+            printf "Enter choice [1-3]: "
+            # Try to read interactively - /dev/tty for piped input, stdin otherwise
+            if [ -e /dev/tty ]; then
+                read -r choice < /dev/tty 2>/dev/null || choice=""
+            elif [ -t 0 ]; then
+                read -r choice
+            fi
+
+            # Default to skip if no input received
+            if [ -z "$choice" ]; then
+                warn "No input received, skipping settings configuration"
+                return
+            fi
+
+            # Backup before any modification
+            cp "$SETTINGS_FILE" "${SETTINGS_FILE}.backup"
+            info "Backed up settings to ${SETTINGS_FILE}.backup"
+
+            case "$choice" in
+                1)
+                    if command -v jq &> /dev/null; then
+                        jq '.statusLine = {"type": "command", "command": "~/.claude/statusline.sh"}' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp"
+                        mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+                        info "Replaced statusLine with usage status"
+                    else
+                        warn "jq not found. Please update manually."
+                    fi
+                    ;;
+                2)
+                    if command -v jq &> /dev/null; then
+                        # Get existing command and append usage
+                        existing_cmd=$(jq -r '.statusLine.command // ""' "$SETTINGS_FILE")
+                        if [ -n "$existing_cmd" ]; then
+                            # Append usage call to existing command
+                            new_cmd="${existing_cmd%\"}; usage=\$(~/.claude/claude-usage-status 2>/dev/null); printf \\\" │ %s\\\" \\\"\$usage\\\"\""
+                            # Remove trailing quote if present and rebuild
+                            existing_cmd_clean=$(echo "$existing_cmd" | sed 's/"$//')
+                            new_cmd="${existing_cmd_clean}; usage=\$(~/.claude/claude-usage-status 2>/dev/null); printf \" │ %s\" \"\$usage\""
+                            jq --arg cmd "$new_cmd" '.statusLine.command = $cmd' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp"
+                            mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+                            info "Appended usage status to existing statusLine"
+                        else
+                            warn "Could not read existing command. Please update manually."
+                        fi
+                    else
+                        warn "jq not found. Please update manually."
+                    fi
+                    ;;
+                3|*)
+                    info "Skipping settings configuration"
+                    ;;
+            esac
             return
         fi
 
-        # Backup existing settings
+        # No existing statusLine - add it
         cp "$SETTINGS_FILE" "${SETTINGS_FILE}.backup"
         info "Backed up existing settings to ${SETTINGS_FILE}.backup"
 
-        # Add statusLine config (insert before last closing brace)
         if command -v jq &> /dev/null; then
             jq '. + {"statusLine": {"type": "command", "command": "~/.claude/statusline.sh"}}' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp"
             mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
-            info "Updated settings.json with statusLine config"
+            info "Added statusLine config to settings.json"
         else
             warn "jq not found. Please add statusLine config manually to $SETTINGS_FILE:"
             echo '  "statusLine": {'
