@@ -2,9 +2,78 @@
 Started: 2026-01-09
 
 ## Codebase Patterns
-<!-- Add reusable patterns discovered during implementation -->
+- Go JSON parsing: Use struct tags with exact JSON field names (e.g., `json:"claudeAiOauth"`)
+- Credentials location: ~/.claude/.credentials.json
+- Error handling: Use fmt.Errorf with %w for wrapping errors
+- API testing: Use httptest.NewServer for mock HTTP servers
+- Testable HTTP clients: Create helper functions with URL parameter for mocking (e.g., fetchUsageFromURL)
+- Testable time functions: Pass `now time.Time` as parameter instead of calling time.Now() internally
 
 ## Key Files
-<!-- Document important files for context -->
+- main.go: Entry point and credential reading logic
+- main_test.go: Tests for credential parsing
+- go.mod: Module definition (claude-usage-status)
+- output/statusline.sh: Shell wrapper for Claude Code status line integration
 
 ---
+
+## 2026-01-09 - US-001
+**Create Go CLI skeleton with credential reading**
+
+Files changed:
+- go.mod
+- main.go
+- main_test.go
+
+**Learnings:**
+- Claude Code OAuth credentials stored in ~/.claude/.credentials.json
+- Structure uses "claudeAiOauth" key (camelCase with Ai, not AI)
+- Go 1.21+ available in environment
+- Tests should use t.TempDir() for isolated test fixtures
+---
+
+## 2026-01-09 - US-002
+**Fetch usage data from Anthropic API**
+
+Files changed:
+- main.go
+- main_test.go
+
+**Learnings:**
+- Anthropic usage API: GET https://api.anthropic.com/api/oauth/usage
+- Required headers: Accept: application/json, Authorization: Bearer {token}, anthropic-beta: oauth-2025-04-20
+- Response contains five_hour and seven_day buckets with utilization (0.0-1.0) and resets_at timestamp
+- JSON field names use snake_case (five_hour, seven_day, resets_at)
+- For testable HTTP clients, create a helper with URL parameter (fetchUsageFromURL) that the main function wraps
+---
+
+## 2026-01-09 - US-003
+**Format output for Claude Code status line**
+
+Files changed:
+- main.go
+- main_test.go
+
+**Learnings:**
+- Emoji color thresholds: green (<70%), yellow (70-90%), red (>90%)
+- For time formatting, use time.Duration with Hours() and Minutes() for human-readable output
+- Pass `now time.Time` as parameter to formatting functions for testability (instead of calling time.Now() inside)
+- time.RFC3339 parses ISO 8601 timestamps from the API (e.g., "2026-01-09T15:00:00Z")
+- Table-driven tests with t.Run() work well for testing formatting functions with multiple cases
+- Shell wrapper scripts: Use cat > /dev/null to read and discard stdin
+---
+
+## 2026-01-09 - US-004
+**Create statusline.sh wrapper script**
+
+Files changed:
+- output/statusline.sh
+
+**Learnings:**
+- Claude Code passes JSON context via stdin that must be read and discarded
+- Use `cat > /dev/null` to consume stdin in shell scripts
+- SCRIPT_DIR detection: `$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)`
+- Check binary executability with `[ -x "$BINARY" ]` before running
+- Fallback messages should be short and use warning emoji (⚠️) for visibility
+---
+

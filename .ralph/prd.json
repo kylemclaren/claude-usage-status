@@ -12,7 +12,7 @@
         "Prints error if credentials not found"
       ],
       "priority": 1,
-      "passes": false
+      "passes": true
     },
     {
       "id": "US-002",
@@ -25,7 +25,7 @@
         "Parses JSON response with five_hour and seven_day utilization"
       ],
       "priority": 2,
-      "passes": false
+      "passes": true
     },
     {
       "id": "US-003",
@@ -38,7 +38,7 @@
         "Shows time until next reset in human readable format"
       ],
       "priority": 3,
-      "passes": false
+      "passes": true
     },
     {
       "id": "US-004",
@@ -51,7 +51,7 @@
         "Script is executable (chmod +x)"
       ],
       "priority": 4,
-      "passes": false
+      "passes": true
     }
   ]
 }
