@@ -6,19 +6,8 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
-	"strings"
 	"time"
 )
-
-// Credentials represents the structure of ~/.claude/.credentials.json
-type Credentials struct {
-	ClaudeAIOAuth struct {
-		AccessToken string `json:"accessToken"`
-	} `json:"claudeAiOauth"`
-}
 
 // UsageBucket represents a usage time bucket (five_hour or seven_day)
 type UsageBucket struct {
@@ -33,87 +22,6 @@ type UsageResponse struct {
 }
 
 const usageAPIURL = "https://api.anthropic.com/api/oauth/usage"
-
-func getCredentialsPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".claude", ".credentials.json")
-}
-
-// readCredentialsFromFile reads credentials from ~/.claude/.credentials.json (Linux)
-func readCredentialsFromFile() (string, error) {
-	credPath := getCredentialsPath()
-	if credPath == "" {
-		return "", fmt.Errorf("could not determine home directory")
-	}
-
-	data, err := os.ReadFile(credPath)
-	if err != nil {
-		return "", err
-	}
-
-	var creds Credentials
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return "", fmt.Errorf("failed to parse credentials: %w", err)
-	}
-
-	if creds.ClaudeAIOAuth.AccessToken == "" {
-		return "", fmt.Errorf("no access token found in credentials")
-	}
-
-	return creds.ClaudeAIOAuth.AccessToken, nil
-}
-
-// readCredentialsFromKeychain reads credentials from macOS Keychain
-func readCredentialsFromKeychain() (string, error) {
-	// Use security command to read from Keychain
-	cmd := exec.Command("security", "find-generic-password",
-		"-s", "Claude Code-credentials",
-		"-w")
-
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to read from Keychain: %w", err)
-	}
-
-	// The output is the password (JSON string), parse it
-	jsonStr := strings.TrimSpace(string(output))
-
-	var creds Credentials
-	if err := json.Unmarshal([]byte(jsonStr), &creds); err != nil {
-		return "", fmt.Errorf("failed to parse Keychain credentials: %w", err)
-	}
-
-	if creds.ClaudeAIOAuth.AccessToken == "" {
-		return "", fmt.Errorf("no access token found in Keychain credentials")
-	}
-
-	return creds.ClaudeAIOAuth.AccessToken, nil
-}
-
-// readCredentials tries to read credentials from file first, then Keychain (macOS)
-func readCredentials() (string, error) {
-	// Try file-based credentials first (Linux and some configurations)
-	token, err := readCredentialsFromFile()
-	if err == nil {
-		return token, nil
-	}
-
-	// On macOS, try Keychain
-	if runtime.GOOS == "darwin" {
-		token, err := readCredentialsFromKeychain()
-		if err == nil {
-			return token, nil
-		}
-		return "", fmt.Errorf("credentials not found in file or Keychain: %w", err)
-	}
-
-	// Return the original file error for non-macOS
-	credPath := getCredentialsPath()
-	return "", fmt.Errorf("credentials not found at %s", credPath)
-}
 
 // fetchUsageFromURL fetches usage data from a specified URL (for testing)
 func fetchUsageFromURL(url, token string) (*UsageResponse, error) {
@@ -159,7 +67,6 @@ func fetchUsage(token string) (*UsageResponse, error) {
 // ANSI color codes for gradient progress bar
 const (
 	reset   = "\033[0m"
-	// Gradient colors from green to yellow to red
 	green   = "\033[38;5;46m"  // bright green
 	lime    = "\033[38;5;118m" // lime
 	yellow  = "\033[38;5;226m" // yellow
@@ -183,7 +90,6 @@ func getGradientColor(position float64) string {
 }
 
 // renderProgressBar creates a gradient progress bar with ANSI colors
-// width is the total character width of the bar
 func renderProgressBar(percent float64, width int) string {
 	if percent > 100 {
 		percent = 100
@@ -257,20 +163,16 @@ func formatTimeUntilReset(resetAt string, now time.Time) string {
 }
 
 // formatStatusLine formats the usage data as a single status line with gradient progress bars
-// Note: API returns utilization as percentage (0-100), not decimal (0-1)
 func formatStatusLine(usage *UsageResponse, now time.Time) string {
 	fiveHourPct := usage.FiveHour.Utilization
 	sevenDayPct := usage.SevenDay.Utilization
 
-	// Create gradient progress bars (10 chars wide each)
 	fiveHourBar := renderProgressBar(fiveHourPct, 10)
 	sevenDayBar := renderProgressBar(sevenDayPct, 10)
 
-	// Color the percentage labels
 	fiveHourColor := getLabelColor(fiveHourPct)
 	sevenDayColor := getLabelColor(sevenDayPct)
 
-	// Use the soonest reset time
 	fiveHourReset := formatTimeUntilReset(usage.FiveHour.ResetsAt, now)
 
 	return fmt.Sprintf("5h %s %s%d%%%s │ 7d %s %s%d%%%s │ ⏱ %s",
