@@ -1,0 +1,57 @@
+{
+  "branchName": "ralph/feature",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create Go CLI skeleton with credential reading",
+      "description": "Create a Go CLI tool that reads Claude Code OAuth credentials from the filesystem. On Linux, credentials are stored in ~/.claude/.credentials.json with structure {\"claudeAiOauth\":{\"accessToken\":\"...\"}}",
+      "acceptanceCriteria": [
+        "go.mod exists with module claude-usage-status",
+        "Reads credentials from ~/.claude/.credentials.json",
+        "Extracts accessToken from claudeAiOauth object",
+        "Prints error if credentials not found"
+      ],
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-002",
+      "title": "Fetch usage data from Anthropic API",
+      "description": "Call the undocumented API at https://api.anthropic.com/api/oauth/usage with Bearer token auth. Headers needed: Accept: application/json, Authorization: Bearer {token}, anthropic-beta: oauth-2025-04-20. Response contains five_hour and seven_day buckets with utilization (0.0-1.0) and resets_at timestamp.",
+      "acceptanceCriteria": [
+        "Makes GET request to api.anthropic.com/api/oauth/usage",
+        "Sends correct Authorization header with Bearer token",
+        "Sends anthropic-beta: oauth-2025-04-20 header",
+        "Parses JSON response with five_hour and seven_day utilization"
+      ],
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-003",
+      "title": "Format output for Claude Code status line",
+      "description": "Output a single line suitable for Claude Code status bar. Show session (5hr) and weekly (7day) usage as percentages with emoji indicators. Use color emoji: green circle for \u003c70%, yellow for 70-90%, red for \u003e90%. Format: 🟢 5h:45% | 🟡 7d:78% | resets 2h15m",
+      "acceptanceCriteria": [
+        "Outputs single line to stdout",
+        "Shows 5-hour usage percentage with color emoji",
+        "Shows 7-day usage percentage with color emoji",
+        "Shows time until next reset in human readable format"
+      ],
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "US-004",
+      "title": "Create statusline.sh wrapper script",
+      "description": "Create a shell script at output/statusline.sh that runs the Go binary and handles errors gracefully. If the binary fails or credentials missing, show a fallback message. Also read stdin (Claude Code passes JSON context) but we only need to output our usage stats.",
+      "acceptanceCriteria": [
+        "Creates statusline.sh that calls the Go binary",
+        "Reads and discards stdin (required by Claude Code)",
+        "Shows fallback message on error",
+        "Script is executable (chmod +x)"
+      ],
+      "priority": 4,
+      "passes": false
+    }
+  ]
+}

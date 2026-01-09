@@ -1,0 +1,46 @@
+# Ralph Configuration
+# See https://github.com/kylemclaren/ralph for documentation
+
+# Agent configuration
+agent:
+  # Agent type: claude-code, amp, opencode, codex, custom
+  type: claude-code
+  # Custom command (only if type: custom)
+  # command: "my-agent --flag"
+  # Additional flags to pass to the agent
+  flags: []
+  # Maximum time per iteration
+  timeout: 30m
+
+# Loop configuration
+loop:
+  # Maximum number of iterations
+  maxIterations: 25
+  # Time to sleep between iterations
+  sleepBetween: 2s
+  # Stop on first failure (default: continue)
+  stopOnFirstFailure: false
+
+# File paths (relative to project root)
+paths:
+  prd: .ralph/prd.json
+  progress: .ralph/progress.txt
+  prompt: .ralph/prompt.md
+
+# Lifecycle hooks
+hooks:
+  enabled: true
+  # Commands to run before the loop starts
+  onStart: []
+  # Commands to run before each iteration
+  onIteration: []
+  # Commands to run when all stories complete
+  onComplete: []
+  # Commands to run on failure
+  onFailure: []
+
+# Notifications (optional)
+notifications:
+  enabled: false
+  # Webhook URL for Slack/Discord notifications
+  webhook: ""
