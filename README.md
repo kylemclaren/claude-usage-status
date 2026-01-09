@@ -1,8 +1,7 @@
-# claude-usage-status
+![image](https://github.com/user-attachments/assets/8f65d14c-59bc-4beb-a515-faf5377ad91f)
+
 
 A Claude Code status line widget that displays your API usage with gradient progress bars.
-
-![Status Line Example](https://img.shields.io/badge/5h-██████░░░░_69%25-brightgreen) ![Status Line Example](https://img.shields.io/badge/7d-██████░░░░_62%25-brightgreen)
 
 ## Features
 
