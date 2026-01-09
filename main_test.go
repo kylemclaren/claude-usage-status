@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestCredentialsParsing(t *testing.T) {
@@ -189,5 +190,122 @@ func TestFetchUsageAPIError(t *testing.T) {
 	_, err := fetchUsageFromURL(server.URL, "bad-token")
 	if err == nil {
 		t.Error("expected error for unauthorized request")
+	}
+}
+
+func TestGetColorEmoji(t *testing.T) {
+	tests := []struct {
+		name        string
+		utilization float64
+		want        string
+	}{
+		{"zero usage", 0.0, "🟢"},
+		{"low usage", 0.45, "🟢"},
+		{"below threshold", 0.69, "🟢"},
+		{"at yellow threshold", 0.70, "🟡"},
+		{"medium usage", 0.78, "🟡"},
+		{"at red threshold", 0.90, "🟡"},
+		{"high usage", 0.91, "🔴"},
+		{"max usage", 1.0, "🔴"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getColorEmoji(tt.utilization)
+			if got != tt.want {
+				t.Errorf("getColorEmoji(%v) = %v, want %v", tt.utilization, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		name string
+		d    time.Duration
+		want string
+	}{
+		{"negative", -1 * time.Hour, "now"},
+		{"zero", 0, "now"},
+		{"only minutes", 15 * time.Minute, "15m"},
+		{"only hours", 2 * time.Hour, "2h"},
+		{"hours and minutes", 2*time.Hour + 15*time.Minute, "2h15m"},
+		{"many hours", 12*time.Hour + 30*time.Minute, "12h30m"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatDuration(tt.d)
+			if got != tt.want {
+				t.Errorf("formatDuration(%v) = %v, want %v", tt.d, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatTimeUntilReset(t *testing.T) {
+	now := time.Date(2026, 1, 9, 12, 45, 0, 0, time.UTC)
+
+	tests := []struct {
+		name    string
+		resetAt string
+		want    string
+	}{
+		{"2 hours 15 minutes ahead", "2026-01-09T15:00:00Z", "2h15m"},
+		{"past time", "2026-01-09T10:00:00Z", "now"},
+		{"invalid format", "invalid", "unknown"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatTimeUntilReset(tt.resetAt, now)
+			if got != tt.want {
+				t.Errorf("formatTimeUntilReset(%v) = %v, want %v", tt.resetAt, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatStatusLine(t *testing.T) {
+	now := time.Date(2026, 1, 9, 12, 45, 0, 0, time.UTC)
+
+	tests := []struct {
+		name  string
+		usage *UsageResponse
+		want  string
+	}{
+		{
+			name: "low usage both",
+			usage: &UsageResponse{
+				FiveHour: UsageBucket{Utilization: 0.45, ResetsAt: "2026-01-09T15:00:00Z"},
+				SevenDay: UsageBucket{Utilization: 0.30, ResetsAt: "2026-01-16T00:00:00Z"},
+			},
+			want: "🟢 5h:45% | 🟢 7d:30% | resets 2h15m",
+		},
+		{
+			name: "mixed usage",
+			usage: &UsageResponse{
+				FiveHour: UsageBucket{Utilization: 0.45, ResetsAt: "2026-01-09T15:00:00Z"},
+				SevenDay: UsageBucket{Utilization: 0.78, ResetsAt: "2026-01-16T00:00:00Z"},
+			},
+			want: "🟢 5h:45% | 🟡 7d:78% | resets 2h15m",
+		},
+		{
+			name: "high usage both",
+			usage: &UsageResponse{
+				FiveHour: UsageBucket{Utilization: 0.95, ResetsAt: "2026-01-09T15:00:00Z"},
+				SevenDay: UsageBucket{Utilization: 0.92, ResetsAt: "2026-01-16T00:00:00Z"},
+			},
+			want: "🔴 5h:95% | 🔴 7d:92% | resets 2h15m",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatStatusLine(tt.usage, now)
+			if got != tt.want {
+				t.Errorf("formatStatusLine() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

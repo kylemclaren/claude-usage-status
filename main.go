@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // Credentials represents the structure of ~/.claude/.credentials.json
@@ -105,6 +106,65 @@ func fetchUsage(token string) (*UsageResponse, error) {
 	return fetchUsageFromURL(usageAPIURL, token)
 }
 
+// getColorEmoji returns a colored circle emoji based on utilization percentage
+// Green (<70%), Yellow (70-90%), Red (>90%)
+func getColorEmoji(utilization float64) string {
+	pct := utilization * 100
+	if pct < 70 {
+		return "🟢"
+	} else if pct <= 90 {
+		return "🟡"
+	}
+	return "🔴"
+}
+
+// formatDuration formats a duration into human-readable format like "2h15m"
+func formatDuration(d time.Duration) string {
+	if d < 0 {
+		return "now"
+	}
+
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+
+	if hours > 0 && minutes > 0 {
+		return fmt.Sprintf("%dh%dm", hours, minutes)
+	} else if hours > 0 {
+		return fmt.Sprintf("%dh", hours)
+	} else if minutes > 0 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+	return "now"
+}
+
+// formatTimeUntilReset calculates and formats time until the reset timestamp
+func formatTimeUntilReset(resetAt string, now time.Time) string {
+	resetTime, err := time.Parse(time.RFC3339, resetAt)
+	if err != nil {
+		return "unknown"
+	}
+
+	duration := resetTime.Sub(now)
+	return formatDuration(duration)
+}
+
+// formatStatusLine formats the usage data as a single status line
+func formatStatusLine(usage *UsageResponse, now time.Time) string {
+	fiveHourPct := int(usage.FiveHour.Utilization * 100)
+	sevenDayPct := int(usage.SevenDay.Utilization * 100)
+
+	fiveHourEmoji := getColorEmoji(usage.FiveHour.Utilization)
+	sevenDayEmoji := getColorEmoji(usage.SevenDay.Utilization)
+
+	// Use the soonest reset time
+	fiveHourReset := formatTimeUntilReset(usage.FiveHour.ResetsAt, now)
+
+	return fmt.Sprintf("%s 5h:%d%% | %s 7d:%d%% | resets %s",
+		fiveHourEmoji, fiveHourPct,
+		sevenDayEmoji, sevenDayPct,
+		fiveHourReset)
+}
+
 func main() {
 	token, err := readCredentials()
 	if err != nil {
@@ -118,8 +178,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("5-hour utilization: %.1f%%\n", usage.FiveHour.Utilization*100)
-	fmt.Printf("7-day utilization: %.1f%%\n", usage.SevenDay.Utilization*100)
-	fmt.Printf("5-hour resets at: %s\n", usage.FiveHour.ResetsAt)
-	fmt.Printf("7-day resets at: %s\n", usage.SevenDay.ResetsAt)
+	fmt.Println(formatStatusLine(usage, time.Now()))
 }
