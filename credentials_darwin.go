@@ -5,28 +5,22 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/keybase/go-keychain"
+	"os/exec"
+	"strings"
 )
 
-// readCredentialsFromKeychain reads credentials from macOS Keychain
+// readCredentialsFromKeychain reads credentials from macOS Keychain using security command
 func readCredentialsFromKeychain() (string, error) {
-	query := keychain.NewItem()
-	query.SetSecClass(keychain.SecClassGenericPassword)
-	query.SetService("Claude Code-credentials")
-	query.SetMatchLimit(keychain.MatchLimitOne)
-	query.SetReturnData(true)
+	cmd := exec.Command("security", "find-generic-password",
+		"-s", "Claude Code-credentials",
+		"-w")
 
-	results, err := keychain.QueryItem(query)
+	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to query Keychain: %w", err)
+		return "", fmt.Errorf("failed to read from Keychain: %w", err)
 	}
 
-	if len(results) == 0 {
-		return "", fmt.Errorf("no credentials found in Keychain")
-	}
-
-	jsonStr := string(results[0].Data)
+	jsonStr := strings.TrimSpace(string(output))
 
 	var creds Credentials
 	if err := json.Unmarshal([]byte(jsonStr), &creds); err != nil {
