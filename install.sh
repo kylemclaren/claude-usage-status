@@ -88,6 +88,13 @@ install() {
     curl -fsSL "$DOWNLOAD_URL" -o "$INSTALL_DIR/claude-usage-status"
     chmod +x "$INSTALL_DIR/claude-usage-status"
 
+    # On macOS, remove quarantine attribute and ad-hoc sign the binary
+    if [ "$OS" = "darwin" ]; then
+        info "Signing binary for macOS..."
+        xattr -cr "$INSTALL_DIR/claude-usage-status" 2>/dev/null || true
+        codesign -s - "$INSTALL_DIR/claude-usage-status" 2>/dev/null || true
+    fi
+
     info "Downloading statusline script..."
     curl -fsSL "$SCRIPT_URL" -o "$INSTALL_DIR/statusline.sh"
     chmod +x "$INSTALL_DIR/statusline.sh"

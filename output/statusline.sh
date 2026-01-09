@@ -11,8 +11,8 @@ cat > /dev/null
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Path to the Go binary (assumes it's built in the parent directory)
-BINARY="${SCRIPT_DIR}/../claude-usage-status"
+# Path to the Go binary (same directory as this script)
+BINARY="${SCRIPT_DIR}/claude-usage-status"
 
 # Run the binary and capture output
 if [ -x "$BINARY" ]; then
