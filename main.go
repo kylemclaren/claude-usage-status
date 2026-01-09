@@ -106,16 +106,74 @@ func fetchUsage(token string) (*UsageResponse, error) {
 	return fetchUsageFromURL(usageAPIURL, token)
 }
 
-// getColorEmoji returns a colored circle emoji based on utilization percentage
-// Green (<70%), Yellow (70-90%), Red (>90%)
-func getColorEmoji(utilization float64) string {
-	pct := utilization * 100
-	if pct < 70 {
-		return "🟢"
-	} else if pct <= 90 {
-		return "🟡"
+// ANSI color codes for gradient progress bar
+const (
+	reset   = "\033[0m"
+	// Gradient colors from green to yellow to red
+	green   = "\033[38;5;46m"  // bright green
+	lime    = "\033[38;5;118m" // lime
+	yellow  = "\033[38;5;226m" // yellow
+	orange  = "\033[38;5;208m" // orange
+	red     = "\033[38;5;196m" // red
+	dimGray = "\033[38;5;240m" // dim gray for empty bar
+)
+
+// getGradientColor returns ANSI color based on position in bar (0.0-1.0)
+func getGradientColor(position float64) string {
+	if position < 0.5 {
+		return green
+	} else if position < 0.7 {
+		return lime
+	} else if position < 0.85 {
+		return yellow
+	} else if position < 0.95 {
+		return orange
 	}
-	return "🔴"
+	return red
+}
+
+// renderProgressBar creates a gradient progress bar with ANSI colors
+// width is the total character width of the bar
+func renderProgressBar(percent float64, width int) string {
+	if percent > 100 {
+		percent = 100
+	}
+	if percent < 0 {
+		percent = 0
+	}
+
+	filled := int(float64(width) * percent / 100)
+	empty := width - filled
+
+	var bar string
+
+	// Filled portion with gradient
+	for i := 0; i < filled; i++ {
+		position := float64(i) / float64(width)
+		color := getGradientColor(position)
+		bar += color + "█"
+	}
+
+	// Empty portion
+	if empty > 0 {
+		bar += dimGray
+		for i := 0; i < empty; i++ {
+			bar += "░"
+		}
+	}
+
+	bar += reset
+	return bar
+}
+
+// getLabelColor returns color for the percentage label based on usage
+func getLabelColor(percent float64) string {
+	if percent < 70 {
+		return green
+	} else if percent < 90 {
+		return yellow
+	}
+	return red
 }
 
 // formatDuration formats a duration into human-readable format like "2h15m"
@@ -148,20 +206,26 @@ func formatTimeUntilReset(resetAt string, now time.Time) string {
 	return formatDuration(duration)
 }
 
-// formatStatusLine formats the usage data as a single status line
+// formatStatusLine formats the usage data as a single status line with gradient progress bars
+// Note: API returns utilization as percentage (0-100), not decimal (0-1)
 func formatStatusLine(usage *UsageResponse, now time.Time) string {
-	fiveHourPct := int(usage.FiveHour.Utilization * 100)
-	sevenDayPct := int(usage.SevenDay.Utilization * 100)
+	fiveHourPct := usage.FiveHour.Utilization
+	sevenDayPct := usage.SevenDay.Utilization
 
-	fiveHourEmoji := getColorEmoji(usage.FiveHour.Utilization)
-	sevenDayEmoji := getColorEmoji(usage.SevenDay.Utilization)
+	// Create gradient progress bars (10 chars wide each)
+	fiveHourBar := renderProgressBar(fiveHourPct, 10)
+	sevenDayBar := renderProgressBar(sevenDayPct, 10)
+
+	// Color the percentage labels
+	fiveHourColor := getLabelColor(fiveHourPct)
+	sevenDayColor := getLabelColor(sevenDayPct)
 
 	// Use the soonest reset time
 	fiveHourReset := formatTimeUntilReset(usage.FiveHour.ResetsAt, now)
 
-	return fmt.Sprintf("%s 5h:%d%% | %s 7d:%d%% | resets %s",
-		fiveHourEmoji, fiveHourPct,
-		sevenDayEmoji, sevenDayPct,
+	return fmt.Sprintf("5h %s %s%d%%%s │ 7d %s %s%d%%%s │ ⏱ %s",
+		fiveHourBar, fiveHourColor, int(fiveHourPct), reset,
+		sevenDayBar, sevenDayColor, int(sevenDayPct), reset,
 		fiveHourReset)
 }
 
