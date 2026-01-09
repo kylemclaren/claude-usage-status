@@ -6,7 +6,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 )
 
@@ -39,7 +42,8 @@ func getCredentialsPath() string {
 	return filepath.Join(home, ".claude", ".credentials.json")
 }
 
-func readCredentials() (string, error) {
+// readCredentialsFromFile reads credentials from ~/.claude/.credentials.json (Linux)
+func readCredentialsFromFile() (string, error) {
 	credPath := getCredentialsPath()
 	if credPath == "" {
 		return "", fmt.Errorf("could not determine home directory")
@@ -47,10 +51,7 @@ func readCredentials() (string, error) {
 
 	data, err := os.ReadFile(credPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("credentials not found at %s", credPath)
-		}
-		return "", fmt.Errorf("failed to read credentials: %w", err)
+		return "", err
 	}
 
 	var creds Credentials
@@ -63,6 +64,55 @@ func readCredentials() (string, error) {
 	}
 
 	return creds.ClaudeAIOAuth.AccessToken, nil
+}
+
+// readCredentialsFromKeychain reads credentials from macOS Keychain
+func readCredentialsFromKeychain() (string, error) {
+	// Use security command to read from Keychain
+	cmd := exec.Command("security", "find-generic-password",
+		"-s", "Claude Code-credentials",
+		"-w")
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to read from Keychain: %w", err)
+	}
+
+	// The output is the password (JSON string), parse it
+	jsonStr := strings.TrimSpace(string(output))
+
+	var creds Credentials
+	if err := json.Unmarshal([]byte(jsonStr), &creds); err != nil {
+		return "", fmt.Errorf("failed to parse Keychain credentials: %w", err)
+	}
+
+	if creds.ClaudeAIOAuth.AccessToken == "" {
+		return "", fmt.Errorf("no access token found in Keychain credentials")
+	}
+
+	return creds.ClaudeAIOAuth.AccessToken, nil
+}
+
+// readCredentials tries to read credentials from file first, then Keychain (macOS)
+func readCredentials() (string, error) {
+	// Try file-based credentials first (Linux and some configurations)
+	token, err := readCredentialsFromFile()
+	if err == nil {
+		return token, nil
+	}
+
+	// On macOS, try Keychain
+	if runtime.GOOS == "darwin" {
+		token, err := readCredentialsFromKeychain()
+		if err == nil {
+			return token, nil
+		}
+		return "", fmt.Errorf("credentials not found in file or Keychain: %w", err)
+	}
+
+	// Return the original file error for non-macOS
+	credPath := getCredentialsPath()
+	return "", fmt.Errorf("credentials not found at %s", credPath)
 }
 
 // fetchUsageFromURL fetches usage data from a specified URL (for testing)
